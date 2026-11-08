@@ -12,7 +12,7 @@ Supports anchor-free YOLOv8-nano inference with fallback spatial PPE verificatio
 
 import os
 from pathlib import Path
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple,Optional
 import cv2
 import numpy as np
 from PIL import Image
