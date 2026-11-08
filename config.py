@@ -11,17 +11,21 @@ BASE_DIR = Path(__file__).resolve().parent
 
 # Database configuration
 DATABASE_DIR = BASE_DIR / "database"
-DB_PATH = DATABASE_DIR / "attendance.db"
+DB_PATH = Path(os.environ["DB_PATH"]) if os.environ.get("DB_PATH") else DATABASE_DIR / "attendance.db"
 
 # Data directories
 DATASET_DIR = BASE_DIR / "dataset"
-STUDENT_IMAGES_DIR = DATASET_DIR / "student_images"
+STUDENT_IMAGES_DIR = (
+    Path(os.environ["STUDENT_IMAGES_DIR"])
+    if os.environ.get("STUDENT_IMAGES_DIR")
+    else DATASET_DIR / "student_images"
+)
 CLASSROOM_IMAGES_DIR = DATASET_DIR / "classroom_images"
 
 # Models and Output directories
 MODELS_DIR = BASE_DIR / "models"
-OUTPUT_DIR = BASE_DIR / "output"
-REPORTS_DIR = BASE_DIR / "reports"
+OUTPUT_DIR = Path(os.environ["OUTPUT_DIR"]) if os.environ.get("OUTPUT_DIR") else BASE_DIR / "output"
+REPORTS_DIR = Path(os.environ["REPORTS_DIR"]) if os.environ.get("REPORTS_DIR") else BASE_DIR / "reports"
 
 # Haar Cascade path (check project models directory first, then OpenCV default if present)
 HAAR_CASCADE_PATH = MODELS_DIR / "haarcascade_frontalface_default.xml"

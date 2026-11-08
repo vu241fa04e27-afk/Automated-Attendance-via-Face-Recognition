@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: automated-attendance-backend
+    runtime: python
+    buildCommand: "pip install -r backend/requirements.txt"
+    startCommand: "uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: ATTENDANCE_SECRET_KEY
+        generateValue: true
+      - key: DB_PATH
+        value: /var/data/attendance.db
+      - key: STUDENT_IMAGES_DIR
+        value: /var/data/student_images
+      - key: OUTPUT_DIR
+        value: /var/data/output
+      - key: REPORTS_DIR
+        value: /var/data/reports
+    disk:
+      name: attendance-data
+      mountPath: /var/data
+      sizeGB: 1
