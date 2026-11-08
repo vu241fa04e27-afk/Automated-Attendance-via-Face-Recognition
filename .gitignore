@@ -1,0 +1,61 @@
+# Python byte code and cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Virtual Environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+
+# Biometric and Student Data Privacy Protection
+dataset/student_images/*
+!dataset/student_images/.gitkeep
+database/*.db
+database/*.sqlite
+database/*.sqlite3
+!database/.gitkeep
+
+# Output artifacts and exported attendance reports
+output/*
+!output/.gitkeep
+reports/*
+!reports/.gitkeep
+
+# IDE and Editor configurations
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Large Pretrained Neural Network Weights
+*.pth
+*.pt
+*.onnx
+*.tflite
+*.h5
+models/*.pth
+models/*.pt
+!models/haarcascade_frontalface_default.xml
+
+# Log files
+*.log
+
+# Frontend Node Modules & Production Build Artifacts
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+
