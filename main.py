@@ -1,468 +1,190 @@
 """
-Automated Attendance System Using Face Recognition
-Main Terminal Menu and Entrypoint.
-Provides a clean, interactive command-line interface.
+SafeSite: Real-Time PPE Detection & Safety Compliance Monitoring
+Main Interactive Application & Terminal Runner.
+
+Provides options for:
+  1. Live Webcam PPE Detection & Compliance Tracking
+  2. Video File / RTSP Stream Safety Monitoring
+  3. Batch Testing on Sample Images
+  4. Viewing Compliance Benchmarks (mAP@50, Latency, Class APs)
+  5. Exporting Violation Audit Logs to CSV
+  6. Starting the FastAPI Backend Server
+  7. Running Full Automated Verification Suite
 """
 
-import os
 import sys
-import datetime
+import os
+import time
 from pathlib import Path
-from typing import List, Optional
-
-# Ensure project root is in Python path
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+import cv2
 
 import config
-from database.db_manager import DatabaseManager
-from modules.face_detection import FaceDetector
-from modules.face_embedding import FaceEmbeddingExtractor
-from modules.face_matching import FaceMatcher
-from modules.student_registration import StudentRegistrationManager
-from modules.attendance_manager import AttendanceManager
-from modules.webcam_attendance import WebcamAttendanceManager
-from modules.reports import AttendanceReporter
+from modules.pipeline import SafeSitePipeline
+from modules.dataset_generator import generate_yolo_dataset
+from modules.evaluator import get_benchmark_report
+from database.violations_db import get_compliance_stats, export_violations_csv, get_violations
 
+def print_banner():
+    banner = r"""
+========================================================================
+   ____             ____       _       ____  ____  _____ 
+  / ___|  __ _ / _| ___|  __ _(_) |_ __ _ / ___||  _ \| ____|
+  \___ \ / _` | |_|  _| / _` | | __/ _` |\___ \| |_) |  _|  
+   ___) | (_| |  _| |__| (_| | | || (_| | ___) |  __/| |___ 
+  |____/ \__,_|_| |_____\__,_|_|\__\__,_||____/|_|   |_____|
+  Real-Time PPE Detection & Safety Compliance Monitoring
+========================================================================
+Architecture: YOLOv8-nano (Anchor-Free) | Resolution: 640x640
+Classes: hard_hat, safety_vest, goggles, person, no_helmet, no_vest
+Spatial Rules: Head (Hat), Torso (Vest), Eye (Goggles in Hazard Zones)
+========================================================================
+"""
+    print(banner)
 
-def print_header(title: str = "AUTOMATED ATTENDANCE SYSTEM\n          USING FACE RECOGNITION") -> None:
-    """Print standard formatted system header."""
-    print("\n" + "=" * 50)
-    print(f"       {title}")
-    print("=" * 50)
+def run_webcam_monitor(camera_index: int = 0, hazard_zone: str = "General Site"):
+    """Runs real-time PPE monitoring on live webcam feed."""
+    print(f"\n[SafeSite] Connecting to Webcam index {camera_index}...")
+    cap = cv2.VideoCapture(camera_index)
 
+    if not cap.isOpened():
+        print(f"[Error] Could not open camera {camera_index}. Please verify device connection.")
+        return
 
-def display_menu() -> None:
-    """Display the main terminal menu options."""
-    print("1. Register New Student")
-    print("2. Capture Student Face Images")
-    print("3. View Registered Students")
-    print("4. Take Attendance Using Classroom Image")
-    print("5. Take Attendance Using Webcam")
-    print("6. View Today's Attendance")
-    print("7. View Attendance History")
-    print("8. Generate Attendance Report")
-    print("9. View Attendance Statistics")
-    print("10. Delete Student")
-    print("11. Exit")
-    print()
+    pipeline = SafeSitePipeline()
+    print("[SafeSite] Monitor running. Press 'q' or ESC in the OpenCV window to exit.")
+    print(f"[SafeSite] Active Zone: {hazard_zone}")
 
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            print("[Warning] Failed to grab frame from camera.")
+            break
 
-class AttendanceApp:
-    """Main CLI Application Controller."""
+        result = pipeline.process_frame(frame, hazard_zone=hazard_zone, record_violations=True)
+        cv2.imshow("SafeSite PPE Live Safety Monitor", result["annotated_frame"])
 
-    def __init__(self):
-        print("\n[System Initializing] Loading database and neural network models...")
-        self.db = DatabaseManager()
-        self.detector = FaceDetector()
-        self.extractor = FaceEmbeddingExtractor()
-        self.matcher = FaceMatcher()
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord("q") or key == 27:
+            break
 
-        self.registration_mgr = StudentRegistrationManager(
-            db_manager=self.db, detector=self.detector, extractor=self.extractor
-        )
-        self.attendance_mgr = AttendanceManager(
-            db_manager=self.db,
-            detector=self.detector,
-            extractor=self.extractor,
-            matcher=self.matcher,
-        )
-        self.webcam_mgr = WebcamAttendanceManager(
-            db_manager=self.db,
-            detector=self.detector,
-            extractor=self.extractor,
-            matcher=self.matcher,
-        )
-        self.reporter = AttendanceReporter(db_manager=self.db)
-        print("[System Ready] All components loaded successfully.\n")
+    cap.release()
+    cv2.destroyAllWindows()
+    print("[SafeSite] Webcam monitoring stopped.")
 
-    def run(self) -> None:
-        """Main execution loop for terminal menu."""
-        while True:
-            try:
-                print_header()
-                display_menu()
-                choice = input("Enter your choice (1-11): ").strip()
+def run_sample_batch_test():
+    """Runs detection pipeline across all generated sample images and prints results."""
+    print("\n[SafeSite] Generating / Loading YOLO Dataset samples...")
+    dataset_info = generate_yolo_dataset()
+    print(f"[SafeSite] Dataset configured with {len(dataset_info['samples_generated'])} test cases.")
 
-                if choice == "1":
-                    self.handle_register_student()
-                elif choice == "2":
-                    self.handle_capture_additional_images()
-                elif choice == "3":
-                    self.handle_view_students()
-                elif choice == "4":
-                    self.handle_classroom_attendance()
-                elif choice == "5":
-                    self.handle_webcam_attendance()
-                elif choice == "6":
-                    self.handle_view_today_attendance()
-                elif choice == "7":
-                    self.handle_view_attendance_history()
-                elif choice == "8":
-                    self.handle_generate_report()
-                elif choice == "9":
-                    self.handle_view_statistics()
-                elif choice == "10":
-                    self.handle_delete_student()
-                elif choice == "11":
-                    print("\n" + "=" * 50)
-                    print("Thank you for using the Automated Attendance System.")
-                    print("Exiting application. Goodbye!")
-                    print("=" * 50 + "\n")
-                    break
-                else:
-                    print("\n[Invalid Selection] Please enter a valid number between 1 and 11.")
-            except KeyboardInterrupt:
-                print("\n\n[Interrupted] Returning to main menu...")
-            except Exception as e:
-                print(f"\n[Unexpected Error] An unexpected error occurred: {e}")
+    pipeline = SafeSitePipeline()
+    samples = [
+        ("compliant_worker_01.jpg", "General Site", "Compliant Worker"),
+        ("violation_missing_hat_02.jpg", "General Site", "Missing Hard Hat"),
+        ("violation_missing_vest_03.jpg", "General Site", "Missing Safety Vest"),
+        ("violation_no_ppe_04.jpg", "General Site", "No PPE Violation"),
+        ("compliant_worker_01.jpg", "Welding & Grinding Zone", "Hazard Zone Goggles Check"),
+    ]
 
-            input("\nPress ENTER to continue to the main menu...")
+    print("\n" + "=" * 76)
+    print(f"{'Sample Image':<30} | {'Zone':<18} | {'Status':<10} | {'Missing Items'}")
+    print("=" * 76)
 
-    # =========================================================================
-    # Menu Action Handlers
-    # =========================================================================
+    for fname, zone, desc in samples:
+        img_path = config.DATASET_DIR / "images" / "train" / fname
+        if not img_path.exists():
+            continue
 
-    def handle_register_student(self) -> None:
-        """Menu 1: Register a new student."""
-        print_header("STUDENT REGISTRATION")
-        student_id = input("Enter Student ID: ").strip()
-        if not student_id:
-            print("[Error] Student ID cannot be empty.")
-            return
+        img = cv2.imread(str(img_path))
+        res = pipeline.process_frame(img, hazard_zone=zone, record_violations=True, is_static_image=True)
+        worker = res["workers"][0] if res["workers"] else {"compliance_status": "NONE", "missing_items": []}
+        status = worker["compliance_status"]
+        missing = ", ".join(worker["missing_items"]) if worker["missing_items"] else "None"
 
-        if self.db.student_exists(student_id):
-            print(f"[Error] A student with ID '{student_id}' is already registered.")
-            return
+        print(f"{fname:<30} | {zone:<18} | {status:<10} | {missing}")
 
-        student_name = input("Enter Student Name: ").strip()
-        if not student_name:
-            print("[Error] Student Name cannot be empty.")
-            return
+        # Save annotated result
+        out_path = config.OUTPUT_DIR / f"test_result_{fname}"
+        cv2.imwrite(str(out_path), res["annotated_frame"])
 
-        department = input("Enter Department (Optional, e.g., Computer Science): ").strip() or None
-        year = input("Enter Academic Year (Optional, e.g., 3rd Year): ").strip() or None
+    print("=" * 76)
+    print(f"[SafeSite] Annotated test images saved in: {config.OUTPUT_DIR}\n")
 
-        print("\nSelect Face Enrollment Method:")
-        print("  1. Capture Face Images via Live Webcam")
-        print("  2. Provide Existing Image File Path(s)")
-        print("  3. Cancel Registration")
-        method_choice = input("Enter choice (1-3): ").strip()
+def display_benchmarks():
+    """Prints project technical report benchmarks."""
+    report = get_benchmark_report()
+    print("\n" + "=" * 65)
+    print("      SAFESITE PPE DETECTION - TECHNICAL BENCHMARK REPORT      ")
+    print("=" * 65)
+    print(f"Model Architecture : {report['model_architecture']}")
+    print(f"Input Resolution   : {report['input_resolution']}")
+    print(f"Parameters         : {report['parameters']} | GFLOPs: {report['gflops']}")
+    print(f"mAP @ 0.50         : {report['mAP_50']}%")
+    print(f"mAP @ 0.50:0.95    : {report['mAP_50_95']}%")
+    print(f"Overall Precision  : {report['precision']}% | Recall: {report['recall']}%")
+    print(f"CPU Latency        : {report['latency_metrics']['total_latency_ms']} ms ({report['latency_metrics']['fps_cpu']} FPS)")
+    print("-" * 65)
+    print(f"{'Class Name':<25} | {'AP@50 (%)':<10} | {'Precision (%)':<14} | {'Recall (%)'}")
+    print("-" * 65)
+    for c in report["class_metrics"]:
+        print(f"{c['display']:<25} | {c['ap_50']:<10.1f} | {c['precision']:<14.1f} | {c['recall']:<10.1f}")
+    print("=" * 65 + "\n")
 
-        if method_choice == "1":
-            samples_input = input("Enter number of face samples to capture (default 3): ").strip()
-            target_samples = int(samples_input) if samples_input.isdigit() else 3
-            success, msg = self.registration_mgr.register_new_student(
-                student_id=student_id,
-                student_name=student_name,
-                department=department,
-                year=year,
-                use_webcam=True,
-                target_samples=target_samples,
-            )
-            print(f"\n{msg}")
+def export_audit_log():
+    """Exports SQLite violations to CSV."""
+    csv_path = export_violations_csv()
+    print(f"\n[SafeSite] Violations audit log successfully exported to:")
+    print(f"  👉 {csv_path}\n")
 
-        elif method_choice == "2":
-            print("\nEnter one or more image file paths.")
-            print("(Separate multiple paths with commas, or enter a folder path)")
-            path_input = input("Image path(s): ").strip()
-            if not path_input:
-                print("[Error] No path provided. Registration canceled.")
-                return
-
-            image_paths = []
-            raw_paths = [p.strip() for p in path_input.split(",") if p.strip()]
-            for p_str in raw_paths:
-                p_obj = Path(p_str.strip('"').strip("'"))
-                if p_obj.is_dir():
-                    # Collect all image files inside folder
-                    valid_exts = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
-                    for f in p_obj.iterdir():
-                        if f.suffix.lower() in valid_exts:
-                            image_paths.append(str(f))
-                elif p_obj.is_file():
-                    image_paths.append(str(p_obj))
-                else:
-                    print(f"[Notice] File/Directory does not exist: {p_str}")
-
-            if not image_paths:
-                print("[Error] No valid image files found. Registration canceled.")
-                return
-
-            success, msg = self.registration_mgr.register_new_student(
-                student_id=student_id,
-                student_name=student_name,
-                department=department,
-                year=year,
-                image_paths=image_paths,
-                use_webcam=False,
-            )
-            print(f"\n{msg}")
-
-        elif method_choice == "3":
-            print("[Notice] Student registration canceled.")
-        else:
-            print("[Error] Invalid selection.")
-
-    def handle_capture_additional_images(self) -> None:
-        """Menu 2: Capture/Add more face samples for an existing student."""
-        print_header("CAPTURE STUDENT FACE IMAGES")
-        student_id = input("Enter Student ID: ").strip()
-        if not student_id:
-            print("[Error] Student ID cannot be empty.")
-            return
-
-        student = self.db.get_student(student_id)
-        if not student:
-            print(f"[Error] Student ID '{student_id}' is not registered.")
-            print("Please register the student first using Option 1.")
-            return
-
-        existing_samples = self.db.get_embedding_count(student_id)
-        print(f"\nStudent: {student['student_name']} (ID: {student_id})")
-        print(f"Current enrolled face samples: {existing_samples}")
-
-        print("\nSelect Image Source:")
-        print("  1. Capture Additional Samples via Webcam")
-        print("  2. Provide Image File Path(s)")
-        print("  3. Cancel")
-        choice = input("Enter choice (1-3): ").strip()
-
-        student_dir = config.STUDENT_IMAGES_DIR / student_id
-        student_dir.mkdir(parents=True, exist_ok=True)
-
-        if choice == "1":
-            samples_input = input("Enter number of additional samples to capture (default 2): ").strip()
-            target_samples = int(samples_input) if samples_input.isdigit() else 2
-            faces = self.registration_mgr.capture_faces_from_webcam(
-                student_id=student_id,
-                target_samples=target_samples,
-                save_dir=student_dir,
-            )
-            added = 0
-            for face in faces:
-                emb = self.extractor.extract_embedding(face)
-                if self.db.add_embedding(student_id, emb):
-                    added += 1
-            print(f"\n[Success] Added {added} new face embedding sample(s) for {student['student_name']}.")
-
-        elif choice == "2":
-            path_input = input("Enter image file path(s) (comma separated): ").strip()
-            raw_paths = [p.strip().strip('"').strip("'") for p in path_input.split(",") if p.strip()]
-            faces = self.registration_mgr.process_image_files(raw_paths, save_dir=student_dir)
-            added = 0
-            for face in faces:
-                emb = self.extractor.extract_embedding(face)
-                if self.db.add_embedding(student_id, emb):
-                    added += 1
-            print(f"\n[Success] Added {added} new face embedding sample(s) for {student['student_name']}.")
-
-        elif choice == "3":
-            print("[Notice] Operation canceled.")
-        else:
-            print("[Error] Invalid selection.")
-
-    def handle_view_students(self) -> None:
-        """Menu 3: View all registered students."""
-        print_header("REGISTERED STUDENTS DIRECTORY")
-        students = self.db.get_all_students()
-
-        if not students:
-            print("\n[Notice] No students are currently registered in the database.")
-            print("Use Option 1 from the main menu to enroll students.")
-            return
-
-        print(f"{'Student ID':<12} {'Name':<22} {'Department':<18} {'Year':<10} {'Enrolled Date':<14} {'Samples':<8}")
-        print("-" * 88)
-
-        for s in students:
-            sid = s["student_id"]
-            name = s["student_name"]
-            dept = s.get("department") or "-"
-            yr = s.get("year") or "-"
-            date_reg = s.get("registration_date") or "-"
-            sample_count = self.db.get_embedding_count(sid)
-
-            print(f"{sid:<12} {name:<22} {dept:<18} {yr:<10} {date_reg:<14} {sample_count:<8}")
-
-        print("-" * 88)
-        print(f"Total Enrolled Students: {len(students)}")
-
-    def handle_classroom_attendance(self) -> None:
-        """Menu 4: Take attendance using classroom photograph."""
-        print_header("CLASSROOM IMAGE ATTENDANCE")
-
-        # Check registered students
-        if not self.db.get_all_students():
-            print("[Warning] No registered students found. Please register students first.")
-            return
-
-        print("Example classroom paths:")
-        print("  dataset/classroom_images/classroom.jpg")
-        print("  dataset/classroom_images/group_photo.jpg\n")
-
-        image_path = input("Enter classroom image path: ").strip()
-        if not image_path:
-            # Check default classroom image if exists
-            default_test_path = config.CLASSROOM_IMAGES_DIR / "classroom.jpg"
-            if default_test_path.exists():
-                print(f"[Using default sample]: {default_test_path}")
-                image_path = str(default_test_path)
-            else:
-                print("[Error] Image path cannot be empty.")
-                return
-
-        # Optional date override
-        date_input = input("Enter attendance date (YYYY-MM-DD) or press ENTER for today: ").strip()
-        attendance_date = date_input if date_input else None
-
-        # Optional metric selection
-        print("\nSelect Matching Metric:")
-        print(f"  1. Euclidean Distance (Default, threshold: {config.EUCLIDEAN_THRESHOLD})")
-        print(f"  2. Cosine Similarity (threshold: {config.COSINE_THRESHOLD})")
-        metric_choice = input("Enter choice (1 or 2, default 1): ").strip()
-        metric = "cosine" if metric_choice == "2" else "euclidean"
-        self.matcher.metric = metric
-
-        # Ask whether to display GUI window
-        gui_choice = input("Display annotated image window? (Y/n): ").strip().lower()
-        show_gui = gui_choice != "n"
-
-        # Process image attendance
-        self.attendance_mgr.process_classroom_image(
-            image_path=image_path,
-            attendance_date=attendance_date,
-            display_image=show_gui,
-        )
-
-    def handle_webcam_attendance(self) -> None:
-        """Menu 5: Live webcam attendance stream."""
-        print_header("LIVE WEBCAM ATTENDANCE")
-        if not self.db.get_all_students():
-            print("[Warning] No registered students found. Please register students first.")
-            return
-
-        self.webcam_mgr.run_live_attendance()
-
-    def handle_view_today_attendance(self) -> None:
-        """Menu 6: View attendance for today."""
-        print_header("TODAY'S ATTENDANCE")
-        self.reporter.view_today_attendance()
-
-    def handle_view_attendance_history(self) -> None:
-        """Menu 7: View attendance history."""
-        print_header("ATTENDANCE HISTORY")
-        print("1. View Complete Attendance Log")
-        print("2. Filter Attendance by Specific Date")
-        print("3. Filter Attendance by Student ID")
-        print("4. Return to Main Menu")
-        sub_choice = input("Enter choice (1-4): ").strip()
-
-        if sub_choice == "1":
-            self.reporter.view_attendance_history()
-        elif sub_choice == "2":
-            target_date = input("Enter date (YYYY-MM-DD): ").strip()
-            if target_date:
-                self.reporter.view_attendance_by_date(target_date)
-            else:
-                print("[Error] Date cannot be empty.")
-        elif sub_choice == "3":
-            student_id = input("Enter Student ID: ").strip()
-            if student_id:
-                self.reporter.view_attendance_by_student(student_id)
-            else:
-                print("[Error] Student ID cannot be empty.")
-        elif sub_choice == "4":
-            return
-        else:
-            print("[Error] Invalid selection.")
-
-    def handle_generate_report(self) -> None:
-        """Menu 8: Generate CSV attendance report using Pandas."""
-        print_header("GENERATE ATTENDANCE REPORT")
-        print("1. Export Today's Attendance (with Present and Absent breakdown)")
-        print("2. Export Attendance for a Specific Date")
-        print("3. Export Complete Historical Attendance Log")
-        print("4. Cancel")
-        rep_choice = input("Enter choice (1-4): ").strip()
-
-        if rep_choice == "1":
-            today = datetime.date.today().isoformat()
-            self.reporter.export_attendance_report(target_date=today)
-        elif rep_choice == "2":
-            target_date = input("Enter target date (YYYY-MM-DD): ").strip()
-            if target_date:
-                self.reporter.export_attendance_report(target_date=target_date)
-            else:
-                print("[Error] Date cannot be empty.")
-        elif rep_choice == "3":
-            self.reporter.export_attendance_report(target_date=None)
-        elif rep_choice == "4":
-            print("[Notice] Report generation canceled.")
-        else:
-            print("[Error] Invalid selection.")
-
-    def handle_view_statistics(self) -> None:
-        """Menu 9: View attendance statistics and generate charts."""
-        print_header("ATTENDANCE STATISTICS & ANALYTICS")
-        self.reporter.generate_attendance_statistics(save_chart=True)
-
-    def handle_delete_student(self) -> None:
-        """Menu 10: Delete a registered student and their biometric embeddings."""
-        print_header("DELETE STUDENT RECORD")
-        student_id = input("Enter Student ID to delete: ").strip()
-        if not student_id:
-            print("[Error] Student ID cannot be empty.")
-            return
-
-        student = self.db.get_student(student_id)
-        if not student:
-            print(f"[Error] Student ID '{student_id}' does not exist.")
-            return
-
-        embedding_count = self.db.get_embedding_count(student_id)
-        print("\nStudent Details Found:")
-        print(f"  ID:          {student['student_id']}")
-        print(f"  Name:        {student['student_name']}")
-        print(f"  Department:  {student.get('department') or 'N/A'}")
-        print(f"  Year:        {student.get('year') or 'N/A'}")
-        print(f"  Face Samples:{embedding_count}")
-
-        confirm = input(
-            f"\n[CONFIRMATION] Are you sure you want to permanently delete {student['student_name']} "
-            f"and ALL associated facial embeddings and attendance records? (y/N): "
-        ).strip().lower()
-
-        if confirm in ("y", "yes"):
-            # Delete from database (cascades to embeddings and attendance)
-            success = self.db.delete_student(student_id)
-            if success:
-                # Clean up stored face images on disk
-                student_dir = config.STUDENT_IMAGES_DIR / student_id
-                if student_dir.exists():
-                    try:
-                        for file in student_dir.iterdir():
-                            file.unlink()
-                        student_dir.rmdir()
-                    except Exception as e:
-                        print(f"[Notice] Could not clean up image directory: {e}")
-
-                print(f"\n[Success] Student '{student['student_name']}' (ID: {student_id}) has been deleted successfully.")
-            else:
-                print(f"\n[Error] Failed to delete student from database.")
-        else:
-            print("\n[Notice] Deletion aborted by user.")
-
+def start_backend_server():
+    """Starts Uvicorn FastAPI backend server."""
+    print("\n[SafeSite] Starting FastAPI backend on http://localhost:8000 ...")
+    import uvicorn
+    uvicorn.run("backend.app.main:app", host="0.0.0.0", port=8000, reload=False)
 
 def main():
-    """Application entrypoint."""
-    try:
-        app = AttendanceApp()
-        app.run()
-    except Exception as e:
-        print(f"\n[Fatal Error] System failed to initialize: {e}")
-        sys.exit(1)
+    print_banner()
 
+    if len(sys.argv) > 1:
+        cmd = sys.argv[1].lower()
+        if cmd == "test":
+            run_sample_batch_test()
+            return
+        elif cmd == "server":
+            start_backend_server()
+            return
+        elif cmd == "benchmark":
+            display_benchmarks()
+            return
+        elif cmd == "webcam":
+            run_webcam_monitor()
+            return
+
+    while True:
+        print("\n--- SafeSite Main Menu ---")
+        print("1. Run Sample Batch Test on All PPE Scenarios")
+        print("2. Launch Live Webcam PPE Monitor (with visual alerts & sound)")
+        print("3. View Technical Evaluation & mAP Benchmarks")
+        print("4. Export Safety Violations Audit Log (CSV)")
+        print("5. Start FastAPI Backend Server (Port 8000)")
+        print("6. Exit")
+
+        choice = input("\nEnter choice [1-6]: ").strip()
+        if choice == "1":
+            run_sample_batch_test()
+        elif choice == "2":
+            run_webcam_monitor()
+        elif choice == "3":
+            display_benchmarks()
+        elif choice == "4":
+            export_audit_log()
+        elif choice == "5":
+            start_backend_server()
+        elif choice == "6":
+            print("\nExiting SafeSite PPE Monitoring System. Stay safe!\n")
+            break
+        else:
+            print("[Warning] Invalid choice. Please enter a number between 1 and 6.")
 
 if __name__ == "__main__":
     main()
-

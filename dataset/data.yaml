@@ -1,0 +1,13 @@
+# SafeSite PPE Detection YOLOv8 Dataset Configuration
+path: C:/Users/ASUS/OneDrive/Desktop/Automated Attendance via Face Recognition/dataset
+train: images/train
+val: images/val
+
+# 6 Safety PPE Classes
+names:
+  0: hard_hat
+  1: safety_vest
+  2: goggles
+  3: person
+  4: no_helmet
+  5: no_vest

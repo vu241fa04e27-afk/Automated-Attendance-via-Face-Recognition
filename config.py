@@ -1,6 +1,6 @@
 """
-Configuration module for Automated Attendance System using Face Recognition.
-Contains all directory paths, model hyperparameters, detection, and recognition thresholds.
+Configuration module for SafeSite: Real-Time PPE Detection and Safety Compliance Monitoring.
+Defines paths, model hyperparameters, YOLOv8-nano settings, spatial containment ratios, and site rules.
 """
 
 import os
@@ -11,71 +11,18 @@ BASE_DIR = Path(__file__).resolve().parent
 
 # Database configuration
 DATABASE_DIR = BASE_DIR / "database"
-DB_PATH = Path(os.environ["DB_PATH"]) if os.environ.get("DB_PATH") else DATABASE_DIR / "attendance.db"
+DB_PATH = Path(os.environ["DB_PATH"]) if os.environ.get("DB_PATH") else DATABASE_DIR / "violations.db"
 
-# Data directories
+# Data & Model directories
 DATASET_DIR = BASE_DIR / "dataset"
-STUDENT_IMAGES_DIR = (
-    Path(os.environ["STUDENT_IMAGES_DIR"])
-    if os.environ.get("STUDENT_IMAGES_DIR")
-    else DATASET_DIR / "student_images"
-)
-CLASSROOM_IMAGES_DIR = DATASET_DIR / "classroom_images"
-
-# Models and Output directories
 MODELS_DIR = BASE_DIR / "models"
 OUTPUT_DIR = Path(os.environ["OUTPUT_DIR"]) if os.environ.get("OUTPUT_DIR") else BASE_DIR / "output"
 REPORTS_DIR = Path(os.environ["REPORTS_DIR"]) if os.environ.get("REPORTS_DIR") else BASE_DIR / "reports"
 
-# Haar Cascade path (check project models directory first, then OpenCV default if present)
-HAAR_CASCADE_PATH = MODELS_DIR / "haarcascade_frontalface_default.xml"
-
-# Face Detection Settings
-# Supported detector options: "mtcnn", "haar"
-DEFAULT_DETECTOR = "mtcnn"
-FACE_IMAGE_SIZE = (160, 160)  # Standard input resolution for FaceNet InceptionResnetV1
-MTCNN_MIN_FACE_SIZE = 40
-MTCNN_THRESHOLDS = [0.6, 0.7, 0.7]  # P-Net, R-Net, O-Net thresholds
-
-# Face Recognition Settings
-# Pretrained weight dataset: 'vggface2' or 'casia-webface'
-FACENET_PRETRAINED_DATASET = "vggface2"
-EMBEDDING_DIMENSION = 512
-
-# Matching Metrics & Thresholds
-# Euclidean distance threshold: smaller distance means closer identity.
-# Since FaceNet outputs L2-normalized embeddings (unit sphere),
-# Euclidean distance typically falls between [0.0, 1.4].
-# A threshold between 0.75 - 0.88 is recommended; 0.85 provides a balanced False Accept vs False Reject rate.
-EUCLIDEAN_THRESHOLD = 0.85
-
-# Cosine similarity threshold: higher similarity (closer to 1.0) means closer identity.
-# Typically > 0.65 to 0.75 indicates same identity.
-COSINE_THRESHOLD = 0.68
-
-# Default matching metric: "euclidean" or "cosine"
-DEFAULT_MATCHING_METRIC = "euclidean"
-
-# Ambiguity threshold: If top match and second match have distance difference < AMBIGUITY_MARGIN,
-# the face match is deemed uncertain and classified as UNKNOWN.
-AMBIGUITY_MARGIN = 0.08
-
-# Webcam Settings
-DEFAULT_WEBCAM_INDEX = 0
-WEBCAM_FRAME_WIDTH = 640
-WEBCAM_FRAME_HEIGHT = 480
-WEBCAM_FPS_DISPLAY = True
-
-# Registration Settings
-MIN_REGISTRATION_SAMPLES = 1
-MAX_REGISTRATION_SAMPLES = 10
-
-# Create required directories automatically
+# Ensure all vital directories exist
 for directory in [
     DATABASE_DIR,
     DATASET_DIR,
-    STUDENT_IMAGES_DIR,
-    CLASSROOM_IMAGES_DIR,
     MODELS_DIR,
     OUTPUT_DIR,
     REPORTS_DIR,
@@ -83,3 +30,63 @@ for directory in [
 ]:
     directory.mkdir(parents=True, exist_ok=True)
 
+# YOLOv8-nano PPE Model Configuration
+# 6 Classes as specified in the case study:
+# hard_hat, safety_vest, goggles, person, no_helmet, no_vest
+PPE_CLASSES = [
+    "hard_hat",
+    "safety_vest",
+    "goggles",
+    "person",
+    "no_helmet",
+    "no_vest",
+]
+
+CLASS_TO_ID = {name: idx for idx, name in enumerate(PPE_CLASSES)}
+ID_TO_CLASS = {idx: name for idx, name in enumerate(PPE_CLASSES)}
+
+# Detection Hyperparameters
+CONF_THRESHOLD = float(os.environ.get("CONF_THRESHOLD", 0.35))
+IOU_THRESHOLD = float(os.environ.get("IOU_THRESHOLD", 0.45))
+INPUT_IMAGE_SIZE = (640, 640)
+YOLO_MODEL_NAME = "yolov8n.pt"
+
+# Spatial Containment Ratios on Worker Bounding Box (ymin_ratio, ymax_ratio)
+# Head region: top 0% to 22% of person height
+HEAD_CONTAINMENT_RATIO = (0.00, 0.22)
+# Eye/Face region: 10% to 24% of person height
+EYE_CONTAINMENT_RATIO = (0.10, 0.24)
+# Torso region: 25% to 75% of person height
+TORSO_CONTAINMENT_RATIO = (0.25, 0.75)
+
+# Safety Rules Configuration
+# Mandatory site-wide PPE
+DEFAULT_MANDATORY_PPE = ["hard_hat", "safety_vest"]
+# PPE required only in designated hazard zones (e.g. grinding, welding, chemical)
+HAZARD_ZONE_REQUIRED_PPE = ["goggles"]
+
+# Worker Tracking Configuration (IoU-based tracker)
+TRACKER_IOU_THRESHOLD = 0.30
+TRACKER_MAX_DISAPPEARED_FRAMES = 20
+
+# Audio Alert Settings
+AUDIO_ALERT_ENABLED = True
+AUDIO_ALERT_DEBOUNCE_SECONDS = 2.0  # Avoid ringing on every frame
+
+# Technical Report Benchmark Metrics (From Case Study Report)
+BENCHMARK_METRICS = {
+    "model": "YOLOv8-nano (anchor-free)",
+    "resolution": "640x640",
+    "mAP_50": 91.4,
+    "mAP_50_95": 68.2,
+    "class_AP_50": {
+        "hard_hat": 94.2,
+        "safety_vest": 92.8,
+        "goggles": 83.5,
+        "person": 96.1,
+        "no_helmet": 89.7,
+        "no_vest": 88.5,
+    },
+    "inference_latency_ms": 14.8,
+    "target_fps": 35.0,
+}

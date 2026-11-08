@@ -1,10 +1,10 @@
 """
-FastAPI Application Entrypoint for Automated Attendance System.
-Integrates Computer Vision FaceNet/MTCNN pipeline with modern RESTful APIs.
+FastAPI Application Entrypoint for SafeSite: Real-Time PPE Detection & Safety Compliance Monitoring.
+Integrates YOLOv8-nano Computer Vision pipeline, IoU worker tracking, spatial containment compliance,
+RESTful APIs, and static artifact serving.
 """
 
 import sys
-import os
 from pathlib import Path
 
 # Add project root to Python path so modules and database can be imported cleanly
@@ -18,70 +18,62 @@ from fastapi.responses import JSONResponse
 
 import config
 from backend.app.routes import (
-    auth,
-    students,
-    recognition,
-    attendance,
-    analytics,
-    reports,
+    detection,
+    violations,
+    compliance,
     settings,
 )
 
 # Initialize FastAPI application
 app = FastAPI(
-    title="Automated Attendance System API",
-    description="High-performance FaceNet and MTCNN face recognition attendance REST API.",
+    title="SafeSite PPE Detection & Safety Compliance API",
+    description="Real-time YOLOv8-nano computer vision safety compliance monitoring API.",
     version="2.0.0",
 )
 
 # Configure Cross-Origin Resource Sharing (CORS)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Permits local development, Vite (5173), and Vercel domains
+    allow_origins=["*"],  # Permits local development, Vite, and Vercel domains
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Mount static directories for viewing generated outputs
+# Mount static directories for viewing generated outputs and reports
 app.mount("/static/output", StaticFiles(directory=str(config.OUTPUT_DIR)), name="output")
 app.mount("/static/reports", StaticFiles(directory=str(config.REPORTS_DIR)), name="reports")
 
 # Include Routers
-app.include_router(auth.router)
-app.include_router(students.router)
-app.include_router(recognition.router)
-app.include_router(attendance.router)
-app.include_router(analytics.router)
-app.include_router(reports.router)
+app.include_router(detection.router)
+app.include_router(violations.router)
+app.include_router(compliance.router)
 app.include_router(settings.router)
 
-
-@app.get("/")
-def root():
-    """Root status endpoint."""
-    return {
-        "status": "online",
-        "project": "Automated Attendance System Using Face Recognition",
-        "version": "2.0.0",
-        "docs_url": "/docs",
-    }
-
-
-@app.get("/api/health")
+@app.get("/api/health", tags=["System Health"])
 def health_check():
-    """Health check endpoint indicating model and database readiness."""
+    """Returns application health status, active model, and database path."""
     return {
         "status": "healthy",
-        "detector": config.DEFAULT_DETECTOR,
-        "model": "InceptionResnetV1 (vggface2)",
-        "database": "SQLite (Connected)",
+        "service": "SafeSite PPE Detection and Compliance System",
+        "version": "2.0.0",
+        "model": config.YOLO_MODEL_NAME,
+        "classes": config.PPE_CLASSES,
+        "database_connected": config.DB_PATH.exists(),
     }
 
+@app.get("/", tags=["Root"])
+def root_redirect():
+    """Root redirect with project summary."""
+    return JSONResponse(
+        content={
+            "project": "SafeSite: Real-Time PPE Detection and Safety Compliance Monitoring",
+            "docs_url": "/docs",
+            "health_url": "/api/health",
+            "classes": config.PPE_CLASSES,
+        }
+    )
 
 if __name__ == "__main__":
     import uvicorn
-
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("backend.app.main:app", host="0.0.0.0", port=port, reload=True)
-
+    uvicorn.run("backend.app.main:app", host="0.0.0.0", port=8000, reload=True)

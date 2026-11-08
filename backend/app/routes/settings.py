@@ -1,66 +1,56 @@
 """
-System Settings and Recognition Thresholds API Routes.
+FastAPI Routes for Safety Rules, Hazard Zones, and Detector Settings.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
-from database.db_manager import DatabaseManager
-from backend.app.schemas.schemas import SettingsUpdate
-from backend.app.auth.security import get_current_admin
+from typing import List, Optional
+from fastapi import APIRouter
+from pydantic import BaseModel
+
 import config
 
-router = APIRouter(prefix="/api/settings", tags=["Settings"])
-db = DatabaseManager()
+router = APIRouter(prefix="/api/settings", tags=["Safety Settings"])
 
+class SettingsUpdate(BaseModel):
+    mandatory_ppe: Optional[List[str]] = None
+    hazard_zone_ppe: Optional[List[str]] = None
+    confidence_threshold: Optional[float] = None
+    iou_threshold: Optional[float] = None
+    audio_alert_enabled: Optional[bool] = None
 
 @router.get("")
-def get_system_settings(admin=Depends(get_current_admin)):
-    """Retrieve current Computer Vision hyperparameters and database settings."""
-    db_settings = db.get_all_settings()
-
+async def get_settings():
+    """Returns current safety configuration and detection settings."""
     return {
-        "euclidean_threshold": float(
-            db_settings.get("euclidean_threshold", config.EUCLIDEAN_THRESHOLD)
-        ),
-        "cosine_threshold": float(
-            db_settings.get("cosine_threshold", config.COSINE_THRESHOLD)
-        ),
-        "ambiguity_margin": float(
-            db_settings.get("ambiguity_margin", config.AMBIGUITY_MARGIN)
-        ),
-        "default_detector": db_settings.get("default_detector", config.DEFAULT_DETECTOR),
-        "matching_metric": db_settings.get("matching_metric", config.DEFAULT_MATCHING_METRIC),
-        "embedding_model": "FaceNet InceptionResnetV1 (vggface2)",
-        "embedding_dimension": config.EMBEDDING_DIMENSION,
-        "face_resolution": "160x160",
+        "status": "success",
+        "settings": {
+            "mandatory_ppe": config.DEFAULT_MANDATORY_PPE,
+            "hazard_zone_ppe": config.HAZARD_ZONE_REQUIRED_PPE,
+            "confidence_threshold": config.CONF_THRESHOLD,
+            "iou_threshold": config.IOU_THRESHOLD,
+            "audio_alert_enabled": config.AUDIO_ALERT_ENABLED,
+            "available_classes": config.PPE_CLASSES,
+            "hazard_zones": [
+                "General Site",
+                "Welding & Grinding Zone",
+                "Chemical Handling Area",
+                "Scaffolding & Heights",
+                "Excavation & Trenching",
+            ],
+        }
     }
 
+@router.post("")
+async def update_settings(update: SettingsUpdate):
+    """Updates safety rules and detection thresholds."""
+    if update.mandatory_ppe is not None:
+        config.DEFAULT_MANDATORY_PPE = update.mandatory_ppe
+    if update.hazard_zone_ppe is not None:
+        config.HAZARD_ZONE_REQUIRED_PPE = update.hazard_zone_ppe
+    if update.confidence_threshold is not None:
+        config.CONF_THRESHOLD = update.confidence_threshold
+    if update.iou_threshold is not None:
+        config.IOU_THRESHOLD = update.iou_threshold
+    if update.audio_alert_enabled is not None:
+        config.AUDIO_ALERT_ENABLED = update.audio_alert_enabled
 
-@router.put("")
-def update_system_settings(settings: SettingsUpdate, admin=Depends(get_current_admin)):
-    """Update runtime recognition thresholds and detection methods."""
-    if settings.euclidean_threshold is not None:
-        if not (0.2 <= settings.euclidean_threshold <= 1.5):
-            raise HTTPException(status_code=400, detail="Euclidean threshold must be between 0.2 and 1.5")
-        db.set_setting("euclidean_threshold", str(settings.euclidean_threshold))
-        config.EUCLIDEAN_THRESHOLD = settings.euclidean_threshold
-
-    if settings.cosine_threshold is not None:
-        if not (0.3 <= settings.cosine_threshold <= 0.99):
-            raise HTTPException(status_code=400, detail="Cosine threshold must be between 0.3 and 0.99")
-        db.set_setting("cosine_threshold", str(settings.cosine_threshold))
-        config.COSINE_THRESHOLD = settings.cosine_threshold
-
-    if settings.ambiguity_margin is not None:
-        db.set_setting("ambiguity_margin", str(settings.ambiguity_margin))
-        config.AMBIGUITY_MARGIN = settings.ambiguity_margin
-
-    if settings.default_detector is not None:
-        db.set_setting("default_detector", settings.default_detector)
-        config.DEFAULT_DETECTOR = settings.default_detector
-
-    if settings.matching_metric is not None:
-        db.set_setting("matching_metric", settings.matching_metric)
-        config.DEFAULT_MATCHING_METRIC = settings.matching_metric
-
-    return {"message": "Settings updated successfully."}
-
+    return {"status": "success", "message": "Safety settings updated successfully"}
