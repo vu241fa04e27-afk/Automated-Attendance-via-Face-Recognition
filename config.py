@@ -79,6 +79,7 @@ for directory in [
     MODELS_DIR,
     OUTPUT_DIR,
     REPORTS_DIR,
+    DB_PATH.parent,
 ]:
     directory.mkdir(parents=True, exist_ok=True)
 
