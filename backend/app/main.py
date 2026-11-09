@@ -18,16 +18,21 @@ from fastapi.responses import JSONResponse
 
 import config
 from backend.app.routes import (
+    auth,
     detection,
     violations,
     compliance,
     settings,
+    students,
+    attendance,
+    analytics,
+    reports,
 )
 
 # Initialize FastAPI application
 app = FastAPI(
-    title="SafeSite PPE Detection & Safety Compliance API",
-    description="Real-time YOLOv8-nano computer vision safety compliance monitoring API.",
+    title="SafeSite & AutoAttend Unified API",
+    description="Real-time Computer Vision (YOLOv8 PPE Detection + FaceNet Face Recognition) REST API.",
     version="2.0.0",
 )
 
@@ -45,10 +50,15 @@ app.mount("/static/output", StaticFiles(directory=str(config.OUTPUT_DIR)), name=
 app.mount("/static/reports", StaticFiles(directory=str(config.REPORTS_DIR)), name="reports")
 
 # Include Routers
+app.include_router(auth.router)
 app.include_router(detection.router)
 app.include_router(violations.router)
 app.include_router(compliance.router)
 app.include_router(settings.router)
+app.include_router(students.router)
+app.include_router(attendance.router)
+app.include_router(analytics.router)
+app.include_router(reports.router)
 
 @app.get("/api/health", tags=["System Health"])
 def health_check():

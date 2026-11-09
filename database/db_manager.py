@@ -16,7 +16,7 @@ class DatabaseManager:
     """Manages all interactions with the SQLite database."""
 
     def __init__(self, db_path: Optional[Path] = None):
-        self.db_path = str(db_path if db_path else config.DB_PATH)
+        self.db_path = str(db_path if db_path else getattr(config, "ATTENDANCE_DB_PATH", config.DB_PATH))
         self.initialize_database()
 
     def get_connection(self) -> sqlite3.Connection:

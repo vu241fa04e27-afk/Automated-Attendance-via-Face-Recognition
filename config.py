@@ -12,12 +12,33 @@ BASE_DIR = Path(__file__).resolve().parent
 # Database configuration
 DATABASE_DIR = BASE_DIR / "database"
 DB_PATH = Path(os.environ["DB_PATH"]) if os.environ.get("DB_PATH") else DATABASE_DIR / "violations.db"
+ATTENDANCE_DB_PATH = DATABASE_DIR / "attendance.db"
 
 # Data & Model directories
 DATASET_DIR = BASE_DIR / "dataset"
+STUDENT_IMAGES_DIR = DATASET_DIR / "student_images"
+CLASSROOM_IMAGES_DIR = DATASET_DIR / "classroom_images"
 MODELS_DIR = BASE_DIR / "models"
 OUTPUT_DIR = Path(os.environ["OUTPUT_DIR"]) if os.environ.get("OUTPUT_DIR") else BASE_DIR / "output"
 REPORTS_DIR = Path(os.environ["REPORTS_DIR"]) if os.environ.get("REPORTS_DIR") else BASE_DIR / "reports"
+
+# Face Recognition / Attendance Compatibility Defaults
+DEFAULT_WEBCAM_INDEX = 0
+WEBCAM_FRAME_WIDTH = 640
+WEBCAM_FRAME_HEIGHT = 480
+WEBCAM_FPS_DISPLAY = True
+DEFAULT_DETECTOR = "mtcnn"
+FACE_IMAGE_SIZE = (160, 160)
+EMBEDDING_DIMENSION = 512
+FACENET_PRETRAINED_DATASET = "vggface2"
+MTCNN_MIN_FACE_SIZE = 40
+MTCNN_THRESHOLDS = [0.6, 0.7, 0.7]
+EUCLIDEAN_THRESHOLD = 0.85
+COSINE_THRESHOLD = 0.68
+DEFAULT_MATCHING_METRIC = "euclidean"
+AMBIGUITY_MARGIN = 0.08
+MIN_REGISTRATION_SAMPLES = 1
+MAX_REGISTRATION_SAMPLES = 10
 
 # Ensure all vital directories exist
 for directory in [
